@@ -1,0 +1,167 @@
+import bpy
+import bmesh
+import mathutils
+from math import sqrt
+from math import log
+
+def Main():
+
+    verts = []  # 2 verts made with XYZ coords
+    mesh = bpy.context.object.data
+    bm = bmesh.new()
+
+    # convert the current mesh to a bmesh (must be in edit mode)
+
+    bpy.data.objects['Mesh'].select = True
+    bpy.context.scene.objects.active = bpy.data.objects['Mesh']
+    bpy.ops.object.mode_set(mode='EDIT')
+    bm.from_mesh(mesh)
+    bpy.ops.object.mode_set(mode='OBJECT')  # return to object mode
+
+    cam_loc = bpy.data.objects["Camera"].location
+    cam_rot = bpy.data.objects["Camera"].rotation_euler
+
+
+
+
+
+    fo = mathutils.Vector([0,0,-1])
+    up = mathutils.Vector([0,1,0])
+    ri = mathutils.Vector([1,0,0])
+    
+    fo.rotate(cam_rot)
+    up.rotate(cam_rot)
+    ri.rotate(cam_rot)
+
+    cam_ray = cam_loc + fo
+
+    #verts.append(cam_loc)
+    #verts.append(cam_loc + fo)
+    #verts.append(cam_loc + up)
+    #verts.append(cam_loc + ri)
+
+    xscans = 128
+    yscans = 128
+    
+    x = 0
+    y = 0
+    
+    print("Beginning scan")
+    
+    while (y < yscans):
+        while (x < xscans):
+            x = x+1
+           
+            x_scaled = (x - xscans / 2)  / xscans
+            y_scaled = (y - yscans / 2) / yscans
+            
+            x_vec = ri * x_scaled
+            y_vec = up * y_scaled
+            
+            ray_vec = x_vec + y_vec + fo
+            
+            ray_vec.normalize()
+            
+            
+            
+            p = Raymarch(cam_loc, ray_vec)
+            if (p[0]*p[0] + p[1]*p[1] + p[2]*p[2]) > 0.001:
+                verts.append(p)
+
+            
+            
+        x = 0
+        print("Scan percent: " + str(100 * y / yscans) )
+        y = y + 1
+        
+
+    print("Scan percent: 100.00")
+
+    for v in verts:
+        bm.verts.new(v)  # add a new vert
+
+    # make the bmesh the object's mesh
+    bm.to_mesh(mesh)  
+    bm.free()  # always do this when finished
+
+def dotv(point):
+    return point[0]*point[0] + point[1]*point[1] + point[1]*point[1] 
+
+def normalize(point):
+    length = sqrt(dot(point))
+    if length == 0:
+        return point
+    point_out = [point[0] / length, point[1] / length, point[2] / length]
+    return point_out
+   
+def multiply(ray, factor):
+    return [ray[0] * factor, ray[1] * factor, ray[2] * factor] 
+    
+    
+def multiplyQuaternions(a, b):
+    a_vec = mathutils.Vector(a.xyz)
+    b_vec = mathutils.Vector(b.xyz)
+    real = a.w*b.w - a_vec.dot(b_vec)
+    complex = a.w*b_vec + b.w*a_vec + a_vec.cross(b_vec)
+    return mathutils.Vector([complex.x, complex.y, complex.z, real])
+
+def dot(a, b):
+    return a.x*b.x + a.y*b.y + a.z*b.z + a.w*b.w
+    
+    
+def DE(point):
+    
+    C = mathutils.Quaternion([-0.72, 0.33, 0.56, 0.0])
+    
+    #C = mathutils.Quaternion([-0.15, -0.15, 0.0, -.95])
+    
+    Z = mathutils.Quaternion([point.x, point.z, point.y, 0.0])
+    dz = mathutils.Quaternion([1.0, 0.0, 0.0, 0.0])
+    
+    i = 0
+    while i < 64:
+        #corf = dz
+        #corf.normalize()
+        #corf = multiplyQuaternions(mathutils.Vector([Z.w, Z.w, Z.w, -Z.x - Z.y - Z.z]), corf)
+        
+        #dz = 2.0 * multiplyQuaternions(Z, dz) + 0.5*corf
+        dz = 2.0 * Z*dz
+    
+    
+        Z = Z*Z + C
+        if Z.dot(Z) > 1000:
+            break
+        
+        i = i + 1
+    d = 0.5*sqrt(Z.dot(Z) / dz.dot(dz) )*log( Z.dot(Z) ) / log(10.0);
+    return d
+    
+    
+    
+    radius = 1
+    return sqrt(point[0]*point[0] + point[1]*point[1] + point[2]*point[2]) - radius
+    
+def Raymarch(start, ray):
+    j = 0
+    iterations = 100
+    
+    epsilon = 0.0025
+    
+    p = start
+    dir = ray
+    
+    while j < iterations:
+
+        dist = DE(p) 
+        p = p + mathutils.Vector(multiply(dir, dist))
+        j = j + 1    
+        if (dist < epsilon) or dotv(p) > 2000:
+            break
+
+    if dist < epsilon:
+        return p
+    else:
+        return [0,0,0]
+
+
+Main()
